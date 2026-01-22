@@ -4,12 +4,13 @@ import { PerspectiveCamera, useTexture, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import Player from './Player'
 import Companion from './Companion'
+import CompanionAI from './CompanionAI'
 import TVScreen from './TVScreen'
 import UserVideoGrid from './UserVideoGrid'
 import FloorGLBModels from './FloorGLBModels'
 import { usePlayerStore } from '../stores/playerStore'
 import { checkCameraCollision } from '../utils/collision'
-import { fetchCategories, fetchRoomsByCategory } from '../services/api'
+import { fetchCategories, fetchRoomsByCategory, fetchProducts } from '../services/api'
 
 // Wall image constants
 const WALL_IMAGES = {
@@ -28,10 +29,18 @@ export default function VirtualMall() {
   const [loading, setLoading] = useState(true)
   // State for generated images
   const [productImagesByCategory, setProductImagesByCategory] = useState({})
-  // State for products loaded from Gemini API
+  // State for products loaded from Products API
   const [products, setProducts] = useState([])
   
-  // Fetch categories, rooms, and generate images on mount
+  // Calculate total product slots available
+  // 4 walls * 23 racks per wall (excluding corners) * 3 shelves per rack = 276 total slots
+  const RACKS_PER_WALL = 25
+  const ACTIVE_RACKS_PER_WALL = 23 // Excluding corner racks (first and last)
+  const SHELVES_PER_RACK = 3
+  const TOTAL_WALLS = 4
+  const TOTAL_PRODUCT_SLOTS = TOTAL_WALLS * ACTIVE_RACKS_PER_WALL * SHELVES_PER_RACK // 276 total slots
+  
+  // Fetch categories, rooms, and products on mount
   useEffect(() => {
     async function loadData() {
       setLoading(true)
@@ -55,6 +64,39 @@ export default function VirtualMall() {
         
         setRoomsByCategory(roomsData)
         
+        // Fetch products from Products API
+        try {
+          const productsData = await fetchProducts({
+            page: 1,
+            limit: TOTAL_PRODUCT_SLOTS, // Only fetch as many as we can display
+            sortBy: 'price',
+            order: 'desc'
+          })
+          
+          // Use products array from response, or empty array if not available
+          const fetchedProducts = productsData.products || productsData.data || []
+          
+          // Normalize products to ensure they have required fields
+          const normalizedProducts = fetchedProducts.map((product, index) => ({
+            id: product.id || product._id || `product-${index}`,
+            name: product.name || product.title || 'Product',
+            category: product.category || product.categoryName || 'General',
+            imageUrl: product.imageUrl || product.image || product.thumbnail || null,
+            modelUrl: product.modelUrl || product.model || null,
+            price: product.price || 0,
+            description: product.description || '',
+            ...product // Include all other fields
+          }))
+          
+          // Limit to available slots (remove extra products)
+          const limitedProducts = normalizedProducts.slice(0, TOTAL_PRODUCT_SLOTS)
+          
+          setProducts(limitedProducts)
+          console.log(`Loaded ${limitedProducts.length} products from API (max ${TOTAL_PRODUCT_SLOTS} slots available)`)
+        } catch (error) {
+          console.error('Error fetching products from API:', error)
+          // Continue with empty products array, will use fallback
+        }
         
       } catch (error) {
         console.error('Error loading categories and rooms:', error)
@@ -67,17 +109,26 @@ export default function VirtualMall() {
   }, [])
   
   
-  // Helper function to get product image URL (uses product's imageUrl, then generated image, then fallback)
+  // Helper function to get product image URL (handles API product structure)
   const getProductImageUrl = (product) => {
     if (!product) return null
-    // Priority: 1. product.imageUrl (from Gemini), 2. generated category image, 3. fallbackImageUrl
+    // Priority: 1. product.imageUrl, 2. product.image, 3. generated category image, 4. fallbackImageUrl
     if (product.imageUrl) {
       return product.imageUrl
+    }
+    if (product.image) {
+      // Handle relative paths - convert to full URL if needed
+      if (product.image.startsWith('http')) {
+        return product.image
+      }
+      // Assume it's a path relative to API base
+      const PRODUCTS_API_BASE_URL = import.meta.env.VITE_PRODUCTS_API_BASE_URL || 'http://localhost:3006'
+      return `${PRODUCTS_API_BASE_URL}${product.image.startsWith('/') ? '' : '/'}${product.image}`
     }
     if (product.category && productImagesByCategory[product.category]) {
       return productImagesByCategory[product.category]
     }
-    return product.fallbackImageUrl || null
+    return product.fallbackImageUrl || product.thumbnail || null
   }
   
   // Fallback products if Gemini API fails or no products loaded
@@ -96,8 +147,29 @@ export default function VirtualMall() {
     },
   ]
   
-  // Use products from Gemini API, or fallback if empty
-  const displayProducts = products.length > 0 ? products : fallbackProducts
+  // Use products from API, limit to available slots, or fallback if empty
+  // Only use products that fit in the available slots
+  const displayProducts = products.length > 0 
+    ? products.slice(0, TOTAL_PRODUCT_SLOTS) // Limit to available slots
+    : fallbackProducts
+
+  // Helper function to get product for a specific slot across all walls
+  // wallIndex: 0=north, 1=south, 2=east, 3=west
+  // rackIndex: 0-24 (but we skip 0 and 24, so effective 1-23)
+  // shelfIndex: 0=bottom, 1=middle, 2=top
+  const getProductForSlot = (wallIndex, rackIndex, shelfIndex) => {
+    if (displayProducts.length === 0) return null
+    
+    // Calculate global slot index
+    // Each wall has 23 active racks * 3 shelves = 69 slots
+    const slotsPerWall = ACTIVE_RACKS_PER_WALL * SHELVES_PER_RACK
+    const wallOffset = wallIndex * slotsPerWall
+    const rackOffset = (rackIndex - 1) * SHELVES_PER_RACK // -1 because we skip rack 0
+    const globalSlotIndex = wallOffset + rackOffset + shelfIndex
+    
+    // Use product at this index, cycling if needed
+    return displayProducts[globalSlotIndex % displayProducts.length]
+  }
   
   // State to track which products are clicked (showing 3D model)
   const [clickedProducts, setClickedProducts] = React.useState(new Set())
@@ -186,11 +258,16 @@ export default function VirtualMall() {
         // 25 racks with 24 intervals: spacing = 200 / 24 = 8.333...
         const rackX = -100 + (i * (200 / 24)) // 25 racks evenly spaced, covers full 200 units
         const rackZ = -99.0 // In front of North wall (negative Z, facing south)
-        // Select product for each rack
-        const product = displayProducts[i % displayProducts.length]
-        const productIdBottom = `${product.id}-north-${i}-bottom`
-        const productIdMiddle = `${product.id}-north-${i}-middle`
-        const productIdTop = `${product.id}-north-${i}-top`
+        // Select product for each shelf using global slot index
+        const productBottom = getProductForSlot(0, i, 0) // North wall (0), rack i, bottom shelf (0)
+        const productMiddle = getProductForSlot(0, i, 1) // North wall (0), rack i, middle shelf (1)
+        const productTop = getProductForSlot(0, i, 2) // North wall (0), rack i, top shelf (2)
+        
+        if (!productBottom || !productMiddle || !productTop) return null
+        
+        const productIdBottom = `${productBottom.id}-north-${i}-bottom`
+        const productIdMiddle = `${productMiddle.id}-north-${i}-middle`
+        const productIdTop = `${productTop.id}-north-${i}-top`
         return (
           <React.Fragment key={`north-rack-${i}`}>
             {/* Bottom shelf */}
@@ -199,12 +276,12 @@ export default function VirtualMall() {
                 position={[rackX, 1.2, rackZ]} 
                 rotation={[0, 0, 0]}
                 width={8}
-                product={product}
-                productIndex={i}
+                product={productBottom}
+                productIndex={i * 3}
                 productId={productIdBottom}
                 isClicked={clickedProducts.has(productIdBottom)}
                 onProductClick={() => handleProductClick(productIdBottom)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productBottom)}
               />
             </Suspense>
             {/* Middle shelf */}
@@ -213,12 +290,12 @@ export default function VirtualMall() {
                 position={[rackX, 3.5, rackZ]} 
                 rotation={[0, 0, 0]}
                 width={8}
-                product={product}
-                productIndex={i + 1}
+                product={productMiddle}
+                productIndex={i * 3 + 1}
                 productId={productIdMiddle}
                 isClicked={clickedProducts.has(productIdMiddle)}
                 onProductClick={() => handleProductClick(productIdMiddle)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productMiddle)}
               />
             </Suspense>
             {/* Top shelf */}
@@ -227,12 +304,12 @@ export default function VirtualMall() {
                 position={[rackX, 6.0, rackZ]} 
                 rotation={[0, 0, 0]}
                 width={8}
-                product={product}
-                productIndex={i + 2}
+                product={productTop}
+                productIndex={i * 3 + 2}
                 productId={productIdTop}
                 isClicked={clickedProducts.has(productIdTop)}
                 onProductClick={() => handleProductClick(productIdTop)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productTop)}
               />
             </Suspense>
           </React.Fragment>
@@ -266,11 +343,16 @@ export default function VirtualMall() {
         // 25 racks with 24 intervals: spacing = 200 / 24 = 8.333...
         const rackX = -100 + (i * (200 / 24)) // 25 racks evenly spaced, covers full 200 units
         const rackZ = 99.0 // In front of South wall (positive Z, facing north)
-        // Select product for each rack
-        const product = displayProducts[i % displayProducts.length]
-        const productIdBottom = `${product.id}-south-${i}-bottom`
-        const productIdMiddle = `${product.id}-south-${i}-middle`
-        const productIdTop = `${product.id}-south-${i}-top`
+        // Select product for each shelf using global slot index
+        const productBottom = getProductForSlot(1, i, 0) // South wall (1), rack i, bottom shelf (0)
+        const productMiddle = getProductForSlot(1, i, 1) // South wall (1), rack i, middle shelf (1)
+        const productTop = getProductForSlot(1, i, 2) // South wall (1), rack i, top shelf (2)
+        
+        if (!productBottom || !productMiddle || !productTop) return null
+        
+        const productIdBottom = `${productBottom.id}-south-${i}-bottom`
+        const productIdMiddle = `${productMiddle.id}-south-${i}-middle`
+        const productIdTop = `${productTop.id}-south-${i}-top`
         return (
           <React.Fragment key={`south-rack-${i}`}>
             {/* Bottom shelf */}
@@ -279,11 +361,12 @@ export default function VirtualMall() {
                 position={[rackX, 1.2, rackZ]} 
                 rotation={[0, Math.PI, 0]} // Face inward (north)
                 width={8}
-                product={product}
-                productIndex={i}
+                product={productBottom}
+                productIndex={i * 3}
                 productId={productIdBottom}
                 isClicked={clickedProducts.has(productIdBottom)}
                 onProductClick={() => handleProductClick(productIdBottom)}
+                imageUrl={getProductImageUrl(productBottom)}
               />
             </Suspense>
             {/* Middle shelf */}
@@ -292,12 +375,12 @@ export default function VirtualMall() {
                 position={[rackX, 3.5, rackZ]} 
                 rotation={[0, Math.PI, 0]} // Face inward (north)
                 width={8}
-                product={product}
-                productIndex={i + 1}
+                product={productMiddle}
+                productIndex={i * 3 + 1}
                 productId={productIdMiddle}
                 isClicked={clickedProducts.has(productIdMiddle)}
                 onProductClick={() => handleProductClick(productIdMiddle)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productMiddle)}
               />
             </Suspense>
             {/* Top shelf */}
@@ -306,12 +389,12 @@ export default function VirtualMall() {
                 position={[rackX, 6.0, rackZ]} 
                 rotation={[0, Math.PI, 0]} // Face inward (north)
                 width={8}
-                product={product}
-                productIndex={i + 2}
+                product={productTop}
+                productIndex={i * 3 + 2}
                 productId={productIdTop}
                 isClicked={clickedProducts.has(productIdTop)}
                 onProductClick={() => handleProductClick(productIdTop)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productTop)}
               />
             </Suspense>
           </React.Fragment>
@@ -343,11 +426,16 @@ export default function VirtualMall() {
         // 25 racks with 24 intervals: spacing = 200 / 24 = 8.333...
         const rackZ = -100 + (i * (200 / 24)) // 25 racks evenly spaced, covers full 200 units
         const rackX = 99.0 // In front of East wall (positive X, facing west toward center)
-        // Select product for each rack
-        const product = displayProducts[i % displayProducts.length]
-        const productIdBottom = `${product.id}-east-${i}-bottom`
-        const productIdMiddle = `${product.id}-east-${i}-middle`
-        const productIdTop = `${product.id}-east-${i}-top`
+        // Select product for each shelf using global slot index
+        const productBottom = getProductForSlot(2, i, 0) // East wall (2), rack i, bottom shelf (0)
+        const productMiddle = getProductForSlot(2, i, 1) // East wall (2), rack i, middle shelf (1)
+        const productTop = getProductForSlot(2, i, 2) // East wall (2), rack i, top shelf (2)
+        
+        if (!productBottom || !productMiddle || !productTop) return null
+        
+        const productIdBottom = `${productBottom.id}-east-${i}-bottom`
+        const productIdMiddle = `${productMiddle.id}-east-${i}-middle`
+        const productIdTop = `${productTop.id}-east-${i}-top`
         return (
           <React.Fragment key={`east-rack-${i}`}>
             {/* Bottom shelf */}
@@ -356,12 +444,12 @@ export default function VirtualMall() {
                 position={[rackX, 1.2, rackZ]} 
                 rotation={[0, -Math.PI / 2, 0]} // Face inward (west toward center)
                 width={8}
-                product={product}
-                productIndex={i}
+                product={productBottom}
+                productIndex={i * 3}
                 productId={productIdBottom}
                 isClicked={clickedProducts.has(productIdBottom)}
                 onProductClick={() => handleProductClick(productIdBottom)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productBottom)}
               />
             </Suspense>
             {/* Middle shelf */}
@@ -370,12 +458,12 @@ export default function VirtualMall() {
                 position={[rackX, 3.5, rackZ]} 
                 rotation={[0, -Math.PI / 2, 0]} // Face inward (west toward center)
                 width={8}
-                product={product}
-                productIndex={i + 1}
+                product={productMiddle}
+                productIndex={i * 3 + 1}
                 productId={productIdMiddle}
                 isClicked={clickedProducts.has(productIdMiddle)}
                 onProductClick={() => handleProductClick(productIdMiddle)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productMiddle)}
               />
             </Suspense>
             {/* Top shelf */}
@@ -384,12 +472,12 @@ export default function VirtualMall() {
                 position={[rackX, 6.0, rackZ]} 
                 rotation={[0, -Math.PI / 2, 0]} // Face inward (west toward center)
                 width={8}
-                product={product}
-                productIndex={i + 2}
+                product={productTop}
+                productIndex={i * 3 + 2}
                 productId={productIdTop}
                 isClicked={clickedProducts.has(productIdTop)}
                 onProductClick={() => handleProductClick(productIdTop)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productTop)}
               />
             </Suspense>
           </React.Fragment>
@@ -422,11 +510,16 @@ export default function VirtualMall() {
         // 25 racks with 24 intervals: spacing = 200 / 24 = 8.333...
         const rackZ = -100 + (i * (200 / 24)) // 25 racks evenly spaced, covers full 200 units
         const rackX = -99.0 // In front of West wall (negative X, facing east)
-        // Select product for each rack
-        const product = displayProducts[i % displayProducts.length]
-        const productIdBottom = `${product.id}-west-${i}-bottom`
-        const productIdMiddle = `${product.id}-west-${i}-middle`
-        const productIdTop = `${product.id}-west-${i}-top`
+        // Select product for each shelf using global slot index
+        const productBottom = getProductForSlot(3, i, 0) // West wall (3), rack i, bottom shelf (0)
+        const productMiddle = getProductForSlot(3, i, 1) // West wall (3), rack i, middle shelf (1)
+        const productTop = getProductForSlot(3, i, 2) // West wall (3), rack i, top shelf (2)
+        
+        if (!productBottom || !productMiddle || !productTop) return null
+        
+        const productIdBottom = `${productBottom.id}-west-${i}-bottom`
+        const productIdMiddle = `${productMiddle.id}-west-${i}-middle`
+        const productIdTop = `${productTop.id}-west-${i}-top`
         return (
           <React.Fragment key={`west-rack-${i}`}>
             {/* Bottom shelf */}
@@ -435,12 +528,12 @@ export default function VirtualMall() {
                 position={[rackX, 1.2, rackZ]} 
                 rotation={[0, Math.PI / 2, 0]} // Face inward (east)
                 width={8}
-                product={product}
-                productIndex={i}
+                product={productBottom}
+                productIndex={i * 3}
                 productId={productIdBottom}
                 isClicked={clickedProducts.has(productIdBottom)}
                 onProductClick={() => handleProductClick(productIdBottom)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productBottom)}
               />
             </Suspense>
             {/* Middle shelf */}
@@ -449,12 +542,12 @@ export default function VirtualMall() {
                 position={[rackX, 3.5, rackZ]} 
                 rotation={[0, Math.PI / 2, 0]} // Face inward (east)
                 width={8}
-                product={product}
-                productIndex={i + 1}
+                product={productMiddle}
+                productIndex={i * 3 + 1}
                 productId={productIdMiddle}
                 isClicked={clickedProducts.has(productIdMiddle)}
                 onProductClick={() => handleProductClick(productIdMiddle)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productMiddle)}
               />
             </Suspense>
             {/* Top shelf */}
@@ -463,12 +556,12 @@ export default function VirtualMall() {
                 position={[rackX, 6.0, rackZ]} 
                 rotation={[0, Math.PI / 2, 0]} // Face inward (east)
                 width={8}
-                product={product}
-                productIndex={i + 2}
+                product={productTop}
+                productIndex={i * 3 + 2}
                 productId={productIdTop}
                 isClicked={clickedProducts.has(productIdTop)}
                 onProductClick={() => handleProductClick(productIdTop)}
-                imageUrl={getProductImageUrl(product)}
+                imageUrl={getProductImageUrl(productTop)}
               />
             </Suspense>
           </React.Fragment>
@@ -526,6 +619,8 @@ export default function VirtualMall() {
         <Companion />
       </Suspense>
 
+      {/* Companion AI - Handles voice interaction with NPC */}
+      <CompanionAI />
 
       {/* Camera System */}
       <CameraSystem target={playerPosition} />
@@ -772,38 +867,65 @@ function ProductModel3D({ position, wallRotation, modelUrl, productIndex = 0 }) 
   )
 }
 
+// Default fallback image URL - using a reliable placeholder service
+const DEFAULT_PRODUCT_IMAGE = 'https://via.placeholder.com/500x500/cccccc/666666?text=Product'
+
 // Product Image Display Component - Shows 2D product image (initial view)
 // Product Image Display with Error Handling
 function ProductImageDisplayWrapper({ position, wallRotation, imageUrl, width = 1.5, height = 1.5, onClick }) {
-  return (
-    <Suspense fallback={
-      <mesh position={position} castShadow>
-        <boxGeometry args={[width, height, 0.1]} />
-        <meshStandardMaterial color="#cccccc" />
-      </mesh>
-    }>
-      <ProductImageDisplay 
-        position={position}
-        wallRotation={wallRotation}
-        imageUrl={imageUrl}
-        width={width}
-        height={height}
-        onClick={onClick}
-      />
-    </Suspense>
-  )
-}
-
-function ProductImageDisplay({ position, wallRotation, imageUrl, width = 1.5, height = 1.5, onClick }) {
-  // useTexture must be called unconditionally (it's a hook)
-  // If it fails, Suspense will catch it and show fallback
-  const productTexture = useTexture(imageUrl)
+  const [texture, setTexture] = React.useState(null)
+  const [hasError, setHasError] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(true)
+  
+  // Load texture manually with error handling
+  React.useEffect(() => {
+    if (!imageUrl) {
+      setHasError(true)
+      setIsLoading(false)
+      return
+    }
+    
+    setIsLoading(true)
+    setHasError(false)
+    
+    const loader = new THREE.TextureLoader()
+    loader.load(
+      imageUrl,
+      (loadedTexture) => {
+        setTexture(loadedTexture)
+        setIsLoading(false)
+        setHasError(false)
+      },
+      undefined,
+      (error) => {
+        console.warn('Failed to load product image, using default:', imageUrl, error)
+        // Try to load default image
+        loader.load(
+          DEFAULT_PRODUCT_IMAGE,
+          (defaultTexture) => {
+            setTexture(defaultTexture)
+            setIsLoading(false)
+            setHasError(false)
+          },
+          undefined,
+          (defaultError) => {
+            console.error('Failed to load default image:', defaultError)
+            setHasError(true)
+            setIsLoading(false)
+          }
+        )
+      }
+    )
+    
+    // Cleanup
+    return () => {
+      if (texture) {
+        texture.dispose()
+      }
+    }
+  }, [imageUrl])
   
   // Products should face toward the center of the room
-  // For North wall (rotation [0,0,0]): images should face south = [0, Math.PI, 0] (width-wise)
-  // For West wall (rotation [0,Math.PI/2,0]): images face east = [0, Math.PI, 0] (width-wise)
-  // For South wall (rotation [0,Math.PI,0]): images face north = [0, 0, 0] (width-wise)
-  // For East wall (rotation [0,-Math.PI/2,0]): images face west = [0, Math.PI, 0] (width-wise)
   let productRotation = [0, Math.PI, 0] // Default: face south/east/west (width-wise display)
   if (wallRotation && Array.isArray(wallRotation)) {
     const yRotation = wallRotation[1] || 0
@@ -826,6 +948,29 @@ function ProductImageDisplay({ position, wallRotation, imageUrl, width = 1.5, he
     }
   }
   
+  // Show loading or error state
+  if (isLoading) {
+    return (
+      <mesh position={position} rotation={productRotation} castShadow>
+        <planeGeometry args={[width, height]} />
+        <meshStandardMaterial color="#cccccc" />
+      </mesh>
+    )
+  }
+  
+  if (hasError && !texture) {
+    return (
+      <mesh position={position} rotation={productRotation} castShadow>
+        <planeGeometry args={[width, height]} />
+        <meshStandardMaterial 
+          color="#888888"
+          emissive="#444444"
+          emissiveIntensity={0.3}
+        />
+      </mesh>
+    )
+  }
+  
   return (
     <mesh 
       position={position} 
@@ -846,8 +991,8 @@ function ProductImageDisplay({ position, wallRotation, imageUrl, width = 1.5, he
     >
       <planeGeometry args={[width, height]} />
       <meshStandardMaterial 
-        map={productTexture || null}
-        color={productTexture ? '#ffffff' : '#888888'} // Fallback color if texture fails
+        map={texture}
+        color="#ffffff"
         transparent={true}
         roughness={0.3}
         metalness={0.1}

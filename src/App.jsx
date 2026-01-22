@@ -1,10 +1,9 @@
 import React, { Suspense, useEffect, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Loader } from '@react-three/drei'
 import VirtualMall from './components/VirtualMall'
 import { TVControlsOverlay, getTVScreenState } from './components/TVScreen'
 import GlobalControls from './components/GlobalControls'
-import { GLBModelsOverlay } from './components/GLBModelsOverlay'
+import NPCInteractionButton from './components/NPCInteractionButton'
 import { useRoomStore } from './stores/roomStore'
 
 function AppContent() {
@@ -65,9 +64,8 @@ function AppContent() {
           <VirtualMall />
         </Suspense>
       </Canvas>
-      <Loader />
       <GlobalControls />
-      <GLBModelsOverlay />
+      <NPCInteractionButton />
       <TVControlsOverlay
         isNear={tvState.isNear}
         audioEnabled={tvState.audioEnabled}

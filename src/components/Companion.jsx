@@ -1,49 +1,69 @@
 import React, { useRef, Suspense } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
+import { useFrame, useThree } from '@react-three/fiber'
+import { useGLTF, useTexture } from '@react-three/drei'
 import { usePlayerStore } from '../stores/playerStore'
 import * as THREE from 'three'
 
-// Simple companion avatar (fallback if model doesn't load)
-function SimpleCompanionAvatar() {
+// Flipkart Mascot - Cute anime-style 2D sprite that always faces camera
+function FlipkartMascot({ camera }) {
+  const meshRef = useRef()
+  const mascotTexture = useTexture('/flipkar-sales-person.png')
+  
+  // Make the sprite always face the camera (billboard effect)
+  useFrame(() => {
+    if (meshRef.current && camera) {
+      meshRef.current.lookAt(camera.position)
+    }
+  })
+  
+  // Configure texture for transparency
+  React.useEffect(() => {
+    if (mascotTexture) {
+      mascotTexture.flipY = false // Don't flip the texture
+    }
+  }, [mascotTexture])
+  
   return (
-    <group>
-      {/* Body */}
-      <mesh position={[0, 0.9, 0]} castShadow>
-        <boxGeometry args={[0.5, 1, 0.4]} />
-        <meshStandardMaterial color="#e24a4a" />
-      </mesh>
-      {/* Head */}
-      <mesh position={[0, 1.7, 0]} castShadow>
-        <sphereGeometry args={[0.25, 16, 16]} />
-        <meshStandardMaterial color="#fdbcb4" />
-      </mesh>
-      {/* Arms */}
-      <mesh position={[-0.4, 0.9, 0]} castShadow>
-        <boxGeometry args={[0.15, 0.6, 0.15]} />
-        <meshStandardMaterial color="#e24a4a" />
-      </mesh>
-      <mesh position={[0.4, 0.9, 0]} castShadow>
-        <boxGeometry args={[0.15, 0.6, 0.15]} />
-        <meshStandardMaterial color="#e24a4a" />
-      </mesh>
-      {/* Legs */}
-      <mesh position={[-0.15, 0.2, 0]} castShadow>
-        <boxGeometry args={[0.15, 0.4, 0.15]} />
-        <meshStandardMaterial color="#2a2a2a" />
-      </mesh>
-      <mesh position={[0.15, 0.2, 0]} castShadow>
-        <boxGeometry args={[0.15, 0.4, 0.15]} />
-        <meshStandardMaterial color="#2a2a2a" />
-      </mesh>
-    </group>
+    <mesh ref={meshRef} position={[0, 1.5, 0]}>
+      <planeGeometry args={[2, 2.5]} /> {/* Width and height for cute anime size */}
+      <meshStandardMaterial 
+        map={mascotTexture}
+        transparent={true}
+        alphaTest={0.1} // Remove transparent pixels
+        side={THREE.DoubleSide}
+        color="#ffffff" // White color to preserve natural image colors
+      />
+    </mesh>
   )
 }
 
-// Companion Avatar Loader - Loads 3D model
-function CompanionAvatarLoader({ modelUrl }) {
+// Companion Avatar Loader - Uses Flipkart mascot or 3D model
+function CompanionAvatarLoader({ modelUrl, camera }) {
+  // Always use Flipkart mascot for cute anime style
+  return (
+    <Suspense fallback={
+      <mesh position={[0, 1.5, 0]}>
+        <planeGeometry args={[2, 2.5]} />
+        <meshStandardMaterial color="#ffff00" transparent opacity={0.5} />
+      </mesh>
+    }>
+      <FlipkartMascot camera={camera} />
+    </Suspense>
+  )
+  
+  // Keep 3D model loading as fallback option for future use
+  /*
   if (!modelUrl) {
-    return <SimpleCompanionAvatar />
+    return (
+      <Suspense fallback={
+        <mesh position={[0, 1.5, 0]}>
+          <planeGeometry args={[2, 2.5]} />
+          <meshStandardMaterial color="#ffff00" transparent opacity={0.5} />
+        </mesh>
+      }>
+        <FlipkartMascot camera={camera} />
+      </Suspense>
+    )
   }
 
   try {
@@ -71,23 +91,38 @@ function CompanionAvatarLoader({ modelUrl }) {
       return <primitive object={scene.clone()} />
     }
   } catch (e) {
-    console.warn('Failed to load companion avatar model, using fallback:', e)
+    console.warn('Failed to load companion avatar model, using mascot:', e)
   }
   
-  return <SimpleCompanionAvatar />
+  return (
+    <Suspense fallback={
+      <mesh position={[0, 1.5, 0]}>
+        <planeGeometry args={[2, 2.5]} />
+        <meshStandardMaterial color="#ffff00" transparent opacity={0.5} />
+      </mesh>
+    }>
+      <FlipkartMascot camera={camera} />
+    </Suspense>
+  )
+  */
 }
 
 // Companion Component - Follows the player
 export default function Companion() {
   const companionRef = useRef()
+  const { camera } = useThree()
   const playerPosition = usePlayerStore((state) => state.position)
   const playerRotation = usePlayerStore((state) => state.rotation)
   const playerVelocity = usePlayerStore((state) => state.velocity)
+  const cameraMode = usePlayerStore((state) => state.cameraMode)
   
-  // Companion follows behind and slightly to the side
-  const followDistance = 2.5 // Distance behind player
-  const sideOffset = 1.0 // Side offset (to the right)
-  const followSpeed = 0.15 // How fast companion follows (smoothing factor)
+  // Position Sales Person in front of camera view, on the right side
+  // Distance in front of camera
+  const forwardDistance = 5.0
+  // Distance to the right side
+  const rightDistance = 4.0
+  // Smooth follow speed - reduced to prevent vibration
+  const followSpeed = 0.1
   
   // Free companion avatar model URL
   // Option 1: Use a free avatar from Mixamo (download and host yourself)
@@ -115,45 +150,55 @@ export default function Companion() {
   const companionModelUrl = null // Set to '/models/companion/companion.glb' after conversion
   
   useFrame(() => {
-    if (!companionRef.current) return
+    if (!companionRef.current || !camera) return
     
-    const [playerX, playerY, playerZ] = playerPosition
+    // Get camera's forward direction and right direction
+    const cameraForward = new THREE.Vector3()
+    camera.getWorldDirection(cameraForward)
     
-    // Calculate target position (behind and to the right of player)
-    const targetX = playerX - Math.sin(playerRotation) * followDistance + Math.cos(playerRotation) * sideOffset
-    const targetZ = playerZ - Math.cos(playerRotation) * followDistance - Math.sin(playerRotation) * sideOffset
-    const targetY = playerY // Same height as player
+    const cameraRight = new THREE.Vector3()
+    cameraRight.setFromMatrixColumn(camera.matrixWorld, 0)
+    cameraRight.normalize()
     
-    // Smoothly move companion toward target position
+    // Calculate target position: in front of camera, to the right side
+    const targetPosition = new THREE.Vector3()
+    targetPosition.copy(camera.position)
+    targetPosition.addScaledVector(cameraForward, forwardDistance) // Move forward
+    targetPosition.addScaledVector(cameraRight, rightDistance) // Move to the right
+    
+    // Use smooth lerp to prevent vibration
     const currentPos = companionRef.current.position
-    currentPos.x += (targetX - currentPos.x) * followSpeed
-    currentPos.y += (targetY - currentPos.y) * followSpeed
-    currentPos.z += (targetZ - currentPos.z) * followSpeed
+    currentPos.lerp(targetPosition, followSpeed)
     
-    // Make companion face the same direction as player (with slight delay for natural look)
-    const targetRotation = playerRotation
-    const currentRotation = companionRef.current.rotation.y
-    let rotationDiff = targetRotation - currentRotation
+    // Make companion face towards the camera (look at player)
+    companionRef.current.lookAt(camera.position)
     
-    // Normalize rotation difference to shortest path
-    while (rotationDiff > Math.PI) rotationDiff -= 2 * Math.PI
-    while (rotationDiff < -Math.PI) rotationDiff += 2 * Math.PI
-    
-    companionRef.current.rotation.y += rotationDiff * followSpeed
-    
-    // Optional: Add slight bobbing animation when moving
+    // Optional: Add slight bobbing animation only when player is moving
     const isMoving = Math.abs(playerVelocity[0]) > 0.01 || Math.abs(playerVelocity[2]) > 0.01
     if (isMoving) {
-      const bobAmount = 0.05
-      const bobSpeed = 0.1
-      companionRef.current.position.y = targetY + Math.sin(Date.now() * bobSpeed) * bobAmount
+      const bobAmount = 0.03 // Reduced bobbing
+      const bobSpeed = 0.08 // Slower bobbing
+      const baseY = targetPosition.y
+      currentPos.y = baseY + Math.sin(Date.now() * bobSpeed) * bobAmount
+    } else {
+      // When not moving, keep Y position stable - use manual lerp
+      currentPos.y += (targetPosition.y - currentPos.y) * followSpeed
     }
   })
   
+  // Initial position - will be updated by useFrame
+  const [px, py, pz] = playerPosition
+  const initialPos = [px + 4, py, pz - 5]
+
   return (
-    <group ref={companionRef} position={[0, 0, 0]}>
-      <Suspense fallback={<SimpleCompanionAvatar />}>
-        <CompanionAvatarLoader modelUrl={companionModelUrl} />
+    <group ref={companionRef} position={initialPos}>
+      <Suspense fallback={
+        <mesh position={[0, 1.5, 0]}>
+          <planeGeometry args={[2, 2.5]} />
+          <meshStandardMaterial color="#ffff00" transparent opacity={0.5} />
+        </mesh>
+      }>
+        <CompanionAvatarLoader modelUrl={companionModelUrl} camera={camera} />
       </Suspense>
     </group>
   )

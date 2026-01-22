@@ -382,3 +382,43 @@ export async function getRoomsByCategoryFromRedis(category) {
     throw error
   }
 }
+
+/**
+ * Fetch products from products API
+ * @param {Object} options - Query options
+ * @param {number} options.page - Page number (default: 1)
+ * @param {number} options.limit - Number of products per page (default: 100)
+ * @param {string} options.sortBy - Field to sort by (default: 'price')
+ * @param {string} options.order - Sort order: 'asc' or 'desc' (default: 'desc')
+ * @returns {Promise<{products: Array, total: number, page: number, limit: number}>}
+ */
+export async function fetchProducts(options = {}) {
+  const PRODUCTS_API_BASE_URL = import.meta.env.VITE_PRODUCTS_API_BASE_URL || 'http://localhost:3006'
+  
+  const {
+    page = 1,
+    limit = 100,
+    sortBy = 'price',
+    order = 'desc'
+  } = options
+
+  const url = new URL(`${PRODUCTS_API_BASE_URL}/api/products`)
+  url.searchParams.append('page', page.toString())
+  url.searchParams.append('limit', limit.toString())
+  url.searchParams.append('sortBy', sortBy)
+  url.searchParams.append('order', order)
+
+  try {
+    const response = await fetch(url.toString())
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error fetching products:', error)
+    throw error
+  }
+}
