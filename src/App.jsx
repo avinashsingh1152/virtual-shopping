@@ -4,6 +4,7 @@ import { Loader } from '@react-three/drei'
 import VirtualMall from './components/VirtualMall'
 import { TVControlsOverlay, getTVScreenState } from './components/TVScreen'
 import GlobalControls from './components/GlobalControls'
+import { GLBModelsOverlay } from './components/GLBModelsOverlay'
 import { useRoomStore } from './stores/roomStore'
 
 function AppContent() {
@@ -66,6 +67,7 @@ function AppContent() {
       </Canvas>
       <Loader />
       <GlobalControls />
+      <GLBModelsOverlay />
       <TVControlsOverlay
         isNear={tvState.isNear}
         audioEnabled={tvState.audioEnabled}

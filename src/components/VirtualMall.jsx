@@ -6,6 +6,7 @@ import Player from './Player'
 import Companion from './Companion'
 import TVScreen from './TVScreen'
 import UserVideoGrid from './UserVideoGrid'
+import FloorGLBModels from './FloorGLBModels'
 import { usePlayerStore } from '../stores/playerStore'
 import { checkCameraCollision } from '../utils/collision'
 import { fetchCategories, fetchRoomsByCategory } from '../services/api'
@@ -132,6 +133,11 @@ export default function VirtualMall() {
         </mesh>
       }>
         <TiledFloor />
+      </Suspense>
+
+      {/* GLB Models on Floor - All models from public/glb folder */}
+      <Suspense fallback={null}>
+        <FloorGLBModels />
       </Suspense>
 
       {/* Border Walls - All Four Sides */}
