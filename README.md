@@ -74,3 +74,4 @@ src/
 - Zustand (state management)
 - Vite (build tool)
 # virtual-shopping
+# virtual-shopping
