@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Chat - Google Meet Style</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Google Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #202124;
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a73e8 0%, #34a853 100%);
+        }
+        .login-box {
+            background: white;
+            color: #333;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            width: 90%;
+        }
+        .login-box h1 { margin-bottom: 10px; text-align: center; color: #1a73e8; }
+        .login-box input, .login-box select {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .login-box button {
+            width: 100%;
+            padding: 14px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .chat-container {
+            display: none;
+            height: 100vh;
+            flex-direction: column;
+        }
+        .chat-container.active { display: flex; }
+        .header {
+            background: #1f1f1f;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .video-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #202124;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .video-container {
+            position: relative;
+            background: #3c4043;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+            min-height: 200px;
+        }
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000;
+            display: block;
+        }
+        .video-label {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .video-controls {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px;
+        }
+        .control-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            width: 48px;
+            height: 48px;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="loginScreen" class="login-container">
+        <div class="login-box">
+            <h1>🎥 Video Chat</h1>
+            <input type="text" id="userName" placeholder="Your Name" required>
+            <input type="text" id="roomId" placeholder="Room ID (leave empty to create new)">
+            <div id="categorySection">
+                <label>Product Category <span style="color: red;">*</span></label>
+                <select id="productCategory">
+                    <option value="">-- Select --</option>
+                    <option value="Electronics">Electronics</option>
+                    <option value="Fashion">Fashion</option>
+                    <option value="Books">Books</option>
+                </select>
+            </div>
+            <button onclick="connectToRoom()">Join Meeting</button>
+        </div>
+    </div>
+
+    <div id="chatScreen" class="chat-container">
+        <div class="header">
+            <span>Room: <strong id="currentRoomId">-</strong></span>
+            <button onclick="leaveRoom()">Leave</button>
+        </div>
+        <div class="video-section">
+            <div class="video-grid" id="videoGrid"></div>
+            <div class="video-controls">
+                <button class="control-btn" onclick="toggleMute()">🎤</button>
+                <button class="control-btn" onclick="toggleVideo()">📹</button>
+                <button class="control-btn" onclick="leaveRoom()">Leave</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let currentRoomId = null;
+        let currentUserId = null;
+        let currentUserName = null;
+        let localStream = null;
+        let peerConnections = new Map();
+        let remoteStreams = new Map();
+
+        function generateRoomId() {
+            return 'room-' + Math.random().toString(36).substr(2, 9);
+        }
+
+        async function connectToRoom() {
+            const userName = document.getElementById('userName').value.trim();
+            const roomIdInput = document.getElementById('roomId').value.trim();
+            const productCategory = document.getElementById('productCategory').value;
+
+            if (!userName) {
+                alert('Please enter your name');
+                return;
+            }
+
+            const isCreatingNewRoom = !roomIdInput;
+            if (isCreatingNewRoom && !productCategory) {
+                alert('Please select a product category');
+                return;
+            }
+
+            currentRoomId = roomIdInput || generateRoomId();
+            currentUserName = userName;
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720 },
+                    audio: true
+                });
+            } catch (error) {
+                alert('Error accessing camera/microphone: ' + error.message);
+                return;
+            }
+
+            // Connect to VIDEO CHAT SOCKET SERVER (Port 3003)
+            const serverUrl = 'http://localhost:3003';
+
+            socket = io(serverUrl, {
+                transports: ['websocket', 'polling'],
+                reconnection: true
+            });
+
+            setupSocketListeners();
+            
+            socket.emit('join-room', {
+                roomId: currentRoomId,
+                userName: currentUserName,
+                productCategory: isCreatingNewRoom ? productCategory : undefined
+            });
+        }
+
+        function setupSocketListeners() {
+            socket.on('connect', () => {
+                console.log('✅ Connected:', socket.id);
+            });
+
+            socket.on('joined-room', (data) => {
+                console.log('✅ Joined room:', data);
+                currentUserId = data.userId;
+                document.getElementById('currentRoomId').textContent = currentRoomId;
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('chatScreen').classList.add('active');
+                addLocalVideo();
+            });
+
+            socket.on('room-users', async (data) => {
+                console.log('📋 Existing users:', data);
+                for (const user of data.users) {
+                    await createPeerConnection(user.socketId, true);
+                }
+            });
+
+            socket.on('user-joined', async (data) => {
+                console.log('👤 User joined:', data);
+                await createPeerConnection(data.socketId, false);
+            });
+
+            socket.on('user-left', (data) => {
+                console.log('👋 User left:', data);
+                removePeerConnection(data.socketId);
+            });
+
+            socket.on('offer', async (data) => {
+                await handleOffer(data);
+            });
+
+            socket.on('answer', async (data) => {
+                await handleAnswer(data);
+            });
+
+            socket.on('ice-candidate', async (data) => {
+                await handleIceCandidate(data);
+            });
+
+            socket.on('error', (data) => {
+                console.error('❌ Error:', data);
+                alert('Error: ' + data.message);
+            });
+        }
+
+        async function createPeerConnection(targetSocketId, isInitiator) {
+            if (peerConnections.has(targetSocketId)) {
+                const existing = peerConnections.get(targetSocketId);
+                if (existing.signalingState !== 'closed') {
+                    return existing;
+                }
+                peerConnections.delete(targetSocketId);
+            }
+
+            console.log(`🔗 Creating connection to ${targetSocketId} (initiator: ${isInitiator})`);
+
+            const pc = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            });
+
+            pc.onconnectionstatechange = () => {
+                console.log(`🔗 Connection state: ${pc.connectionState}`);
+            };
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    pc.addTrack(track, localStream);
+                });
+            }
+
+            pc.ontrack = (event) => {
+                console.log(`🎥 Received ${event.track.kind} track from ${targetSocketId}`);
+                
+                let stream = remoteStreams.get(targetSocketId);
+                if (!stream) {
+                    stream = new MediaStream();
+                    remoteStreams.set(targetSocketId, stream);
+                }
+                
+                if (event.streams && event.streams.length > 0) {
+                    event.streams[0].getTracks().forEach(track => {
+                        if (!stream.getTracks().find(t => t.id === track.id)) {
+                            stream.addTrack(track);
+                        }
+                    });
+                } else {
+                    if (!stream.getTracks().find(t => t.id === event.track.id)) {
+                        stream.addTrack(event.track);
+                    }
+                }
+                
+                addRemoteVideo(targetSocketId, stream);
+            };
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice-candidate', {
+                        candidate: event.candidate,
+                        targetSocketId: targetSocketId,
+                        roomId: currentRoomId
+                    });
+                }
+            };
+
+            peerConnections.set(targetSocketId, pc);
+
+            if (isInitiator) {
+                try {
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    socket.emit('offer', {
+                        offer: pc.localDescription,
+                        targetSocketId: targetSocketId,
+                        roomId: currentRoomId
+                    });
+                    console.log(`✅ Offer sent to ${targetSocketId}`);
+                } catch (error) {
+                    console.error('❌ Error creating offer:', error);
+                }
+            }
+
+            return pc;
+        }
+
+        async function handleOffer(data) {
+            try {
+                let pc = peerConnections.get(data.senderSocketId);
+                
+                if (!pc) {
+                    pc = await createPeerConnection(data.senderSocketId, false);
+                }
+
+                if (pc.signalingState === 'have-local-offer') {
+                    console.warn('⚠️  Already have local offer, closing and recreating');
+                    pc.close();
+                    peerConnections.delete(data.senderSocketId);
+                    pc = await createPeerConnection(data.senderSocketId, false);
+                }
+
+                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                
+                socket.emit('answer', {
+                    answer: pc.localDescription,
+                    targetSocketId: data.senderSocketId,
+                    roomId: currentRoomId
+                });
+                console.log(`✅ Answer sent to ${data.senderSocketId}`);
+            } catch (error) {
+                console.error('❌ Error handling offer:', error);
+            }
+        }
+
+        async function handleAnswer(data) {
+            try {
+                const pc = peerConnections.get(data.senderSocketId);
+                if (!pc) {
+                    console.warn('No peer connection for answer');
+                    return;
+                }
+
+                if (pc.signalingState === 'have-local-offer') {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    console.log(`✅ Answer received from ${data.senderSocketId}`);
+                }
+            } catch (error) {
+                console.error('❌ Error handling answer:', error);
+            }
+        }
+
+        async function handleIceCandidate(data) {
+            try {
+                const pc = peerConnections.get(data.senderSocketId);
+                if (!pc || !data.candidate) return;
+
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                } catch (err) {
+                    console.warn('Could not add ICE candidate:', err.message);
+                }
+            } catch (error) {
+                console.error('Error handling ICE candidate:', error);
+            }
+        }
+
+        function removePeerConnection(socketId) {
+            const pc = peerConnections.get(socketId);
+            if (pc) {
+                pc.close();
+                peerConnections.delete(socketId);
+            }
+            remoteStreams.delete(socketId);
+            const videoContainer = document.getElementById(`remote-${socketId}`);
+            if (videoContainer) {
+                videoContainer.remove();
+            }
+        }
+
+        function addLocalVideo() {
+            const videoGrid = document.getElementById('videoGrid');
+            const container = document.createElement('div');
+            container.className = 'video-container';
+            container.id = 'local-video';
+            const video = document.createElement('video');
+            video.autoplay = true;
+            video.muted = true;
+            video.playsInline = true;
+            video.srcObject = localStream;
+            const label = document.createElement('div');
+            label.className = 'video-label';
+            label.textContent = `${currentUserName} (You)`;
+            container.appendChild(video);
+            container.appendChild(label);
+            videoGrid.appendChild(container);
+        }
+
+        function addRemoteVideo(socketId, stream) {
+            const videoGrid = document.getElementById('videoGrid');
+            let container = document.getElementById(`remote-${socketId}`);
+            
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'video-container';
+                container.id = `remote-${socketId}`;
+                const video = document.createElement('video');
+                video.autoplay = true;
+                video.playsInline = true;
+                video.muted = false;
+                video.id = `video-${socketId}`;
+                const label = document.createElement('div');
+                label.className = 'video-label';
+                label.textContent = 'Remote User';
+                container.appendChild(video);
+                container.appendChild(label);
+                videoGrid.appendChild(container);
+            }
+
+            const video = document.getElementById(`video-${socketId}`);
+            if (video) {
+                video.srcObject = stream;
+                video.play().catch(err => {
+                    console.error('Error playing video:', err);
+                });
+            }
+        }
+
+        function toggleMute() {
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = !track.enabled;
+                });
+            }
+        }
+
+        function toggleVideo() {
+            if (localStream) {
+                localStream.getVideoTracks().forEach(track => {
+                    track.enabled = !track.enabled;
+                });
+            }
+        }
+
+        function leaveRoom() {
+            if (socket) {
+                socket.emit('leave-room');
+                socket.disconnect();
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            peerConnections.forEach(pc => pc.close());
+            peerConnections.clear();
+            remoteStreams.clear();
+            document.getElementById('chatScreen').classList.remove('active');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('videoGrid').innerHTML = '';
+        }
+
+        document.getElementById('roomId').addEventListener('input', function() {
+            const categorySection = document.getElementById('categorySection');
+            if (this.value.trim()) {
+                categorySection.style.display = 'none';
+            } else {
+                categorySection.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

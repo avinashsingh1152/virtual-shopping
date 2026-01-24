@@ -31,3 +31,8 @@ lerna-debug.log*
 *.swp
 *.swo
 *~
+
+# Large binary files - use Git LFS or external storage
+product_api/public/zip/*.zip
+product_api/public/**/textures/*.png
+product_api/public/**/*.blend
