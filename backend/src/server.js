@@ -123,7 +123,7 @@ app.use((err, req, res, next) => {
         console.error('Failed to initialize products:', err);
     }
 
-    httpServer.listen(PORT, () => {
+    httpServer.listen(PORT, '0.0.0.0', () => {
         console.log(`\n🚀 Server running on port ${PORT}`);
         console.log(`📡 Health Check: http://localhost:${PORT}/health`);
         console.log(`🛍️  Products:     http://localhost:${PORT}/api/products`);
