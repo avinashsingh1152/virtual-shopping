@@ -14,10 +14,11 @@ env:
   - key: NODE_ENV
     value: production
   # PORT is automatically provided by Render - don't override it
-  - key: REDIS_URL
+  - key: GEMINI_API_KEY
     sync: false
-  - key: OPENAI_API_KEY
-    sync: false
+  # Optional: Override default model
+  - key: GEMINI_MODEL_NAME
+    value: gemini-2.0-flash
 
 # Health Check
 healthCheckPath: /health

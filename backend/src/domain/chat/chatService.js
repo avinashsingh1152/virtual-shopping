@@ -1,11 +1,11 @@
-import { genvoyService } from '../ai/genvoyService.js';
+import { geminiService } from '../ai/geminiService.js';
 import { productService } from '../product/productService.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const MODEL_NAME = process.env.GEMINI_MODEL_NAME || 'gemini-2.5-flash';
-const SUBSCRIPTION_KEY = process.env.GENVOY_SUBSCRIPTION_KEY;
+const MODEL_NAME = process.env.GEMINI_MODEL_NAME || 'gemini-2.0-flash';
+// const SUBSCRIPTION_KEY = process.env.GENVOY_SUBSCRIPTION_KEY; // Not needed for public API
 
 // Store conversation history per room
 const conversationHistory = new Map(); // roomId -> array of messages
@@ -54,12 +54,8 @@ export const chatService = {
         };
 
         try {
-            if (!SUBSCRIPTION_KEY) {
-                // Fallback if no key
-                return this._getFallbackResponse(message, products);
-            }
-
-            const data = await genvoyService.generateContent(MODEL_NAME, requestPayload, SUBSCRIPTION_KEY);
+            // Public Gemini API doesn't use subscription key, it uses API key loaded in service
+            const data = await geminiService.generateContent(MODEL_NAME, requestPayload);
 
             if (data && data.candidates && data.candidates.length > 0) {
                 const responseText = data.candidates[0].content.parts[0].text;
