@@ -1,18 +1,20 @@
 // API service for fetching categories and rooms
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
-// Image generation API uses the same base URL
+// CRITICAL: VITE_API_BASE_URL MUST be set in environment variables
+if (!import.meta.env.VITE_API_BASE_URL) {
+  throw new Error('❌ VITE_API_BASE_URL environment variable is required but not set!')
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+// All APIs use the same base URL
 const IMAGE_API_BASE_URL = import.meta.env.VITE_IMAGE_API_BASE_URL || API_BASE_URL
-// Gemini API for product generation uses the same base URL
 const GEMINI_API_BASE_URL = import.meta.env.VITE_GEMINI_API_BASE_URL || API_BASE_URL
-// Redis API uses the same base URL
 const REDIS_API_BASE_URL = import.meta.env.VITE_REDIS_API_BASE_URL || API_BASE_URL
 
 // Debug: Log the API endpoints being used
 console.log('🔧 API Configuration:')
-console.log('  VITE_API_BASE_URL from env:', import.meta.env.VITE_API_BASE_URL)
-console.log('  API_BASE_URL:', API_BASE_URL)
-console.log('  IMAGE_API_BASE_URL:', IMAGE_API_BASE_URL)
-console.log('  REDIS_API_BASE_URL:', REDIS_API_BASE_URL)
+console.log('  ✅ VITE_API_BASE_URL:', API_BASE_URL)
+console.log('  📡 IMAGE_API_BASE_URL:', IMAGE_API_BASE_URL)
+console.log('  📡 REDIS_API_BASE_URL:', REDIS_API_BASE_URL)
 
 /**
  * Fetch all categories from the API (now using /api/rooms endpoint)
@@ -400,7 +402,7 @@ export async function getRoomsByCategoryFromRedis(category) {
  * @returns {Promise<{products: Array, total: number, page: number, limit: number}>}
  */
 export async function fetchProducts(options = {}) {
-  const PRODUCTS_API_BASE_URL = import.meta.env.VITE_PRODUCTS_API_BASE_URL || 'http://localhost:3001'
+  const PRODUCTS_API_BASE_URL = import.meta.env.VITE_PRODUCTS_API_BASE_URL || API_BASE_URL
 
   const {
     page = 1,

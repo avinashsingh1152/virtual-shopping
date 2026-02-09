@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import io from 'socket.io-client'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+if (!import.meta.env.VITE_API_BASE_URL) {
+    throw new Error('❌ VITE_API_BASE_URL is required!')
+}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 export default function VideoMeeting() {
     const [step, setStep] = useState('lobby') // 'lobby' or 'meeting'
@@ -94,8 +97,8 @@ export default function VideoMeeting() {
 
     const connectToSocket = () => {
         const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? 'http://localhost:3001'
-            : window.location.origin
+            ? API_BASE_URL
+            : API_BASE_URL
         const socketUrl = `${serverUrl}/meeting`
 
         socketRef.current = io(socketUrl, {

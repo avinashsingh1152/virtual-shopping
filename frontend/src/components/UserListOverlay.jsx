@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react'
 import { getAllRoomsFromRedis } from '../services/api'
 import io from 'socket.io-client'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+if (!import.meta.env.VITE_API_BASE_URL) {
+  throw new Error('❌ VITE_API_BASE_URL is required!')
+}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 // Global state for user list
 let userListState = {
@@ -36,8 +39,8 @@ export function UserListOverlay() {
           // Video Call: /meeting namespace (this one)
           // Player:     /player namespace (in VirtualMall.jsx)
           const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? 'http://localhost:3001'
-            : window.location.origin
+            ? API_BASE_URL
+            : API_BASE_URL
 
           const socketUrl = `${serverUrl}/meeting`
           console.log('🟢 UserListOverlay: Video Call Socket Connecting (for video/audio)')

@@ -15,7 +15,10 @@ import { checkCameraCollision } from '../utils/collision'
 import { fetchCategories, fetchRoomsByCategory, fetchProducts } from '../services/api'
 
 // Wall image constants
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+if (!import.meta.env.VITE_API_BASE_URL) {
+  throw new Error('❌ VITE_API_BASE_URL environment variable is required for wall images!')
+}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const WALL_IMAGES = {
   north: `${API_BASE_URL}/api/products/files/northwall.avif`,
   south: `${API_BASE_URL}/api/products/files/file/southwall.jpg`,
@@ -125,7 +128,7 @@ export default function VirtualMall() {
         return product.image
       }
       // Assume it's a path relative to API base
-      const PRODUCTS_API_BASE_URL = import.meta.env.VITE_PRODUCTS_API_BASE_URL || 'http://localhost:3001'
+      const PRODUCTS_API_BASE_URL = import.meta.env.VITE_PRODUCTS_API_BASE_URL || import.meta.env.VITE_API_BASE_URL
       return `${PRODUCTS_API_BASE_URL}${product.image.startsWith('/') ? '' : '/'}${product.image}`
     }
     if (product.category && productImagesByCategory[product.category]) {
@@ -209,11 +212,17 @@ export default function VirtualMall() {
   useEffect(() => {
     // Connect to Player namespace - SEPARATE from video call socket
     // This socket is ONLY for syncing player positions in the 3D world
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+
+    if (!import.meta.env.VITE_API_BASE_URL) {
+      console.error('❌ VITE_API_BASE_URL not set! Cannot connect to player socket.')
+      return
+    }
+
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
     const playerSocket = io(`${API_BASE_URL}/player`)
     playerSocketRef.current = playerSocket
 
-    console.log('🔵 Player Socket Connected (for multiplayer positions)')
+    console.log('🔵 Player Socket Connecting to:', `${API_BASE_URL}/player`)
 
     // Listen for existing players when joining
     playerSocket.on('current-players', (players) => {

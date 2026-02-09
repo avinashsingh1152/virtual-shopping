@@ -25,10 +25,14 @@ class AIAgentService {
         this.disconnect()
       }
 
-      // Connect to AI Agent namespace on port 3001
-      const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:3001'
-        : window.location.origin
+      // Connect to AI Agent namespace
+      if (!import.meta.env.VITE_API_BASE_URL) {
+        console.error('❌ VITE_API_BASE_URL not set! Cannot connect to AI Agent.')
+        reject(new Error('VITE_API_BASE_URL not set'))
+        return
+      }
+
+      const serverUrl = import.meta.env.VITE_API_BASE_URL
 
       const socketUrl = `${serverUrl}/ai-agent`
       this.aiSocket = io(socketUrl, {

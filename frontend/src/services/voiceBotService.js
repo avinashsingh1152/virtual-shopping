@@ -1,7 +1,10 @@
 // Voice Bot Service - Uses REST API for voice-to-voice communication
 // Backend: http://localhost:3001/api/bot/chat
 
-const BOT_API_BASE_URL = import.meta.env.VITE_BOT_API_BASE_URL || 'http://localhost:3001'
+if (!import.meta.env.VITE_API_BASE_URL) {
+  throw new Error('❌ VITE_API_BASE_URL is required!')
+}
+const BOT_API_BASE_URL = import.meta.env.VITE_BOT_API_BASE_URL || import.meta.env.VITE_API_BASE_URL
 
 class VoiceBotService {
   constructor() {
