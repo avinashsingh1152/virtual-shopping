@@ -26,7 +26,15 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
-const PORT = process.env.PORT || 3001;
+
+// Parse PORT correctly - Render provides this automatically
+const PORT = parseInt(process.env.PORT, 10) || 3001;
+
+// Debug: Log environment
+console.log('🔧 Environment Debug:');
+console.log('  NODE_ENV:', process.env.NODE_ENV);
+console.log('  PORT (raw):', process.env.PORT);
+console.log('  PORT (parsed):', PORT);
 
 // CORS setup
 const corsOptions = {

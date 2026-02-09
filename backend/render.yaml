@@ -5,7 +5,7 @@
 build:
   command: npm install
 
-# Start Command  
+# Start Command
 start:
   command: npm start
 
@@ -13,8 +13,7 @@ start:
 env:
   - key: NODE_ENV
     value: production
-  - key: PORT
-    value: 3001
+  # PORT is automatically provided by Render - don't override it
   - key: REDIS_URL
     sync: false
   - key: OPENAI_API_KEY
