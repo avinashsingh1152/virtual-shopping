@@ -27,14 +27,26 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
-// Parse PORT correctly - Render provides this automatically
-const PORT = parseInt(process.env.PORT, 10) || 3001;
+// CRITICAL: PORT must be provided by environment (Render provides this automatically)
+if (!process.env.PORT) {
+    console.error('❌ FATAL ERROR: PORT environment variable is not set!');
+    console.error('   Render should provide this automatically.');
+    console.error('   For local development, set PORT=3001 in your .env file');
+    process.exit(1);
+}
+
+const PORT = parseInt(process.env.PORT, 10);
+
+if (isNaN(PORT) || PORT <= 0) {
+    console.error(`❌ FATAL ERROR: Invalid PORT value: ${process.env.PORT}`);
+    console.error('   PORT must be a valid positive number');
+    process.exit(1);
+}
 
 // Debug: Log environment
 console.log('🔧 Environment Debug:');
 console.log('  NODE_ENV:', process.env.NODE_ENV);
-console.log('  PORT (raw):', process.env.PORT);
-console.log('  PORT (parsed):', PORT);
+console.log('  PORT:', PORT);
 
 // CORS setup
 const corsOptions = {
