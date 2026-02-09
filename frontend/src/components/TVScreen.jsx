@@ -652,9 +652,10 @@ export default function TVScreen({ position, rotation }) {
           // This is SEPARATE from the player socket in VirtualMall.jsx
           // Video Call: /meeting namespace (this one)
           // Player:     /player namespace (in VirtualMall.jsx)
+          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
           const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? 'http://localhost:3001'
-            : window.location.origin
+            ? API_BASE_URL
+            : API_BASE_URL
 
           const socketUrl = `${serverUrl}/meeting`
           // Debug: Log the connection URL
