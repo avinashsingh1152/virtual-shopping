@@ -1,11 +1,11 @@
 // API service for fetching categories and rooms
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
-// Image generation API uses port 3001
-const IMAGE_API_BASE_URL = import.meta.env.VITE_IMAGE_API_BASE_URL || 'http://localhost:3001'
-// Gemini API for product generation uses port 3001
-const GEMINI_API_BASE_URL = import.meta.env.VITE_GEMINI_API_BASE_URL || 'http://localhost:3001'
-// Redis API uses port 3001
-const REDIS_API_BASE_URL = import.meta.env.VITE_REDIS_API_BASE_URL || 'http://localhost:3001'
+// Image generation API uses the same base URL
+const IMAGE_API_BASE_URL = import.meta.env.VITE_IMAGE_API_BASE_URL || API_BASE_URL
+// Gemini API for product generation uses the same base URL
+const GEMINI_API_BASE_URL = import.meta.env.VITE_GEMINI_API_BASE_URL || API_BASE_URL
+// Redis API uses the same base URL
+const REDIS_API_BASE_URL = import.meta.env.VITE_REDIS_API_BASE_URL || API_BASE_URL
 
 /**
  * Fetch all categories from the API (now using /api/rooms endpoint)
