@@ -1,0 +1,27 @@
+# Render.com Deployment Configuration
+# This file is used by Render to deploy the backend
+
+# Build Command
+build:
+  command: npm install
+
+# Start Command  
+start:
+  command: npm start
+
+# Environment
+env:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: 3001
+  - key: REDIS_URL
+    sync: false
+  - key: OPENAI_API_KEY
+    sync: false
+
+# Health Check
+healthCheckPath: /health
+
+# Auto-Deploy
+autoDeploy: true
