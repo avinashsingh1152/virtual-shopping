@@ -1,7 +1,10 @@
 // Socket.IO service for real-time communication
 import io from 'socket.io-client'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+if (!import.meta.env.VITE_API_BASE_URL) {
+  throw new Error('❌ VITE_API_BASE_URL is required!')
+}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const WS_URL = API_BASE_URL.replace(/^http/, 'ws')
 
 class SocketService {
@@ -25,8 +28,8 @@ class SocketService {
     return new Promise((resolve, reject) => {
       // Connect to Socket.IO MEETING namespace on port 3001 (same as API)
       const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:3001'
-        : window.location.origin
+        ? API_BASE_URL
+        : API_BASE_URL
 
       const socketUrl = `${serverUrl}/meeting`
       this.socket = io(socketUrl, {

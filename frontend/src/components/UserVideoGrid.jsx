@@ -5,7 +5,10 @@ import * as THREE from 'three'
 import io from 'socket.io-client'
 import { getAllRoomsFromRedis } from '../services/api'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+if (!import.meta.env.VITE_API_BASE_URL) {
+  throw new Error('❌ VITE_API_BASE_URL is required!')
+}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 /**
  * UserVideoGrid - Google Meet style user display in virtual world
@@ -51,8 +54,8 @@ export default function UserVideoGrid({ position = [0, 5, -90], rotation = [0, 0
 
         // 3. Connect Socket
         const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-          ? 'http://localhost:3001'
-          : window.location.origin
+          ? API_BASE_URL
+          : API_BASE_URL
 
         const socketUrl = `${serverUrl}/meeting`
         console.log(`🟢 UserVideoGrid: Connecting to ${socketUrl} for room ${channelId}`)

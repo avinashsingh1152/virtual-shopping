@@ -1,7 +1,10 @@
 // WebRTC service for room connections with Socket.IO integration
 import { socketService } from './socketService'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+if (!import.meta.env.VITE_API_BASE_URL) {
+  throw new Error('❌ VITE_API_BASE_URL is required!')
+}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 // STUN servers for NAT traversal
 const ICE_SERVERS = [

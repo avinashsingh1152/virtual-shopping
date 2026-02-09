@@ -5,7 +5,10 @@ import { usePlayerStore } from '../stores/playerStore'
 import { getAllRoomsFromRedis } from '../services/api'
 import io from 'socket.io-client'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+if (!import.meta.env.VITE_API_BASE_URL) {
+  throw new Error('❌ VITE_API_BASE_URL is required!')
+}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
 // Global state for TV screen controls (accessible from App.jsx)
 let tvScreenState = {
@@ -652,13 +655,17 @@ export default function TVScreen({ position, rotation }) {
           // This is SEPARATE from the player socket in VirtualMall.jsx
           // Video Call: /meeting namespace (this one)
           // Player:     /player namespace (in VirtualMall.jsx)
-          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
-          const serverUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? API_BASE_URL
-            : API_BASE_URL
 
+          if (!import.meta.env.VITE_API_BASE_URL) {
+            console.error('❌ VITE_API_BASE_URL not set! Cannot connect to video socket.')
+            return
+          }
+
+          const serverUrl = import.meta.env.VITE_API_BASE_URL
           const socketUrl = `${serverUrl}/meeting`
+
           // Debug: Log the connection URL
+          console.log('🔌 TVScreen: Connecting to video socket:', socketUrl)
           setConnectionStatus(`Connecting to ${socketUrl}...`)
           console.log('🟢 Video Call Socket Connecting (for video/audio calls)')
 
