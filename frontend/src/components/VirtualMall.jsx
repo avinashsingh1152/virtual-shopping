@@ -15,11 +15,12 @@ import { checkCameraCollision } from '../utils/collision'
 import { fetchCategories, fetchRoomsByCategory, fetchProducts } from '../services/api'
 
 // Wall image constants
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 const WALL_IMAGES = {
-  north: 'http://localhost:3001/api/products/files/northwall.avif',
-  south: 'http://localhost:3001/api/products/files/file/southwall.jpg',
-  east: 'http://localhost:3001/api/products/files/file/eastwall.avif',
-  west: 'http://localhost:3001/api/products/files/westwall.webp',
+  north: `${API_BASE_URL}/api/products/files/northwall.avif`,
+  south: `${API_BASE_URL}/api/products/files/file/southwall.jpg`,
+  east: `${API_BASE_URL}/api/products/files/file/eastwall.avif`,
+  west: `${API_BASE_URL}/api/products/files/westwall.webp`,
 }
 
 export default function VirtualMall() {
@@ -208,7 +209,8 @@ export default function VirtualMall() {
   useEffect(() => {
     // Connect to Player namespace - SEPARATE from video call socket
     // This socket is ONLY for syncing player positions in the 3D world
-    const playerSocket = io('http://localhost:3001/player')
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+    const playerSocket = io(`${API_BASE_URL}/player`)
     playerSocketRef.current = playerSocket
 
     console.log('🔵 Player Socket Connected (for multiplayer positions)')
